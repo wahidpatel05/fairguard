@@ -128,6 +128,21 @@ async def proxy_request(
             content={"error": "missing_header", "detail": "X-Downstream-URL header is required"},
         )
 
+    # Validate scheme to prevent SSRF against internal services via non-HTTP protocols.
+    # Only http and https are permitted; this endpoint is intended to proxy external
+    # model endpoints authenticated by the API key on the caller side.
+    from urllib.parse import urlparse
+
+    parsed_url = urlparse(x_downstream_url)
+    if parsed_url.scheme not in ("http", "https"):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "error": "invalid_downstream_url",
+                "detail": "X-Downstream-URL must use http or https scheme",
+            },
+        )
+
     fail_mode = (x_fail_mode or "open").lower()
 
     # Check current fairness status
