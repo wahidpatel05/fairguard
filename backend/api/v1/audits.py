@@ -67,7 +67,7 @@ async def run_offline_audit(
     result = await db.execute(
         select(FairnessContract).where(
             FairnessContract.project_id == project_id,
-            FairnessContract.is_active == True,
+            FairnessContract.is_active.is_(True),
         )
     )
     active_contracts = result.scalars().all()

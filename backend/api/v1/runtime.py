@@ -70,7 +70,7 @@ async def get_runtime_status(
     result = await db.execute(
         select(FairnessContract).where(
             FairnessContract.project_id == project_id,
-            FairnessContract.is_active == True,
+            FairnessContract.is_active.is_(True),
         )
     )
     contracts = result.scalars().all()

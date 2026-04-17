@@ -116,6 +116,8 @@ def evaluate_contracts(metrics: dict, contracts: list[dict]) -> list[dict]:
                 if isinstance(attr_metrics, dict) and metric_name in attr_metrics
             ]
             if candidates:
+                # disparate_impact: take min (lower = more disparate = worst case)
+                # gap metrics: take max (higher gap = more unfair = worst case)
                 value = min(candidates) if metric_name == "disparate_impact" else max(candidates)
 
         if value is None:

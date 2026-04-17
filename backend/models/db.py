@@ -38,7 +38,7 @@ class Project(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     domain: Mapped[str] = mapped_column(SAEnum("hiring", "lending", "healthcare", "other", name="project_domain"), default="other")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
     owner: Mapped["User"] = relationship("User", back_populates="projects")
     contracts: Mapped[list["FairnessContract"]] = relationship("FairnessContract", back_populates="project")
@@ -114,7 +114,7 @@ class RuntimeDecision(Base):
     sensitive_attributes: Mapped[dict] = mapped_column(JSON, nullable=False)
     decision_outcome: Mapped[bool] = mapped_column(Boolean, nullable=False)
     ground_truth: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="runtime_decisions")
 
@@ -128,7 +128,7 @@ class RuntimeMetrics(Base):
     window_type: Mapped[str] = mapped_column(SAEnum("1hr", "24hr", "rolling_n", name="window_type"), nullable=False)
     metrics_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(SAEnum("healthy", "warning", "critical", name="runtime_status"), nullable=False)
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="runtime_metrics")
 

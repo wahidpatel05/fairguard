@@ -48,14 +48,18 @@ def verify_token(token: str) -> dict:
 
 
 def hash_api_key(api_key_token: str) -> str:
-    """Compute a SHA-256 digest of an API key token for storage comparison.
+    """Compute an HMAC-SHA256 digest of an API key token for storage comparison.
 
-    SHA-256 is intentionally used here — this is NOT password hashing.
-    API key tokens are long random values (256-bit entropy); a fast digest is
-    sufficient and bcrypt would be unnecessarily slow for this lookup path.
+    API key tokens are long random values (256-bit entropy from secrets.token_urlsafe).
+    HMAC-SHA256 keyed with SECRET_KEY binds the hash to this deployment, preventing
+    offline cracking even if the database is compromised.
     """
-    digest = hashlib.sha256(api_key_token.encode())
-    return digest.hexdigest()
+    import hmac
+    return hmac.new(
+        settings.SECRET_KEY.encode(),
+        api_key_token.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def generate_api_key() -> str:
@@ -85,7 +89,7 @@ async def get_current_user(
     if api_key:
         key_hash = hash_api_key(api_key)
         result = await db.execute(
-            select(APIKey).where(APIKey.key_hash == key_hash, APIKey.is_active == True)
+            select(APIKey).where(APIKey.key_hash == key_hash, APIKey.is_active.is_(True))
         )
         api_key_obj = result.scalar_one_or_none()
         if not api_key_obj:
