@@ -9,6 +9,7 @@ from app.api.v1.contracts import router as contracts_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.receipts import router as receipts_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.runtime import router as runtime_router
 from app.api.v1.users import router as users_router
 
 api_router = APIRouter()
@@ -20,4 +21,5 @@ api_router.include_router(contracts_router)
 api_router.include_router(projects_router)
 api_router.include_router(receipts_router)
 api_router.include_router(reports_router)
+api_router.include_router(runtime_router)
 api_router.include_router(users_router)
