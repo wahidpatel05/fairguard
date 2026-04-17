@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for FairGuard."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import (
     String, Boolean, DateTime, ForeignKey, JSON, LargeBinary, Enum as SAEnum, Text
@@ -8,6 +8,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -19,7 +23,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(SAEnum("admin", "project_owner", "viewer", name="user_role"), default="viewer")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     projects: Mapped[list["Project"]] = relationship("Project", back_populates="owner")
     api_keys: Mapped[list["APIKey"]] = relationship("APIKey", back_populates="user")
@@ -33,8 +37,8 @@ class Project(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     domain: Mapped[str] = mapped_column(SAEnum("hiring", "lending", "healthcare", "other", name="project_domain"), default="other")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=_now)
 
     owner: Mapped["User"] = relationship("User", back_populates="projects")
     contracts: Mapped[list["FairnessContract"]] = relationship("FairnessContract", back_populates="project")
@@ -53,7 +57,7 @@ class FairnessContract(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
     contract_json: Mapped[dict] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="contracts")
@@ -71,7 +75,7 @@ class AuditLog(Base):
     dataset_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     metrics_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     verdict: Mapped[str] = mapped_column(SAEnum("pass", "fail", "pass_with_warnings", name="audit_verdict"), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now)
     endpoint_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="audit_logs")
@@ -94,7 +98,7 @@ class FairnessReceipt(Base):
     verdict: Mapped[str] = mapped_column(String(50), nullable=False)
     signature: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     public_key: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     audit_log: Mapped["AuditLog"] = relationship("AuditLog", back_populates="receipt")
     project: Mapped["Project"] = relationship("Project", back_populates="receipts")
@@ -150,7 +154,7 @@ class APIKey(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     project_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     user: Mapped["User"] = relationship("User", back_populates="api_keys")
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="api_keys")

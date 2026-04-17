@@ -48,9 +48,14 @@ def verify_token(token: str) -> dict:
 
 
 def hash_api_key(api_key_token: str) -> str:
-    """Compute a SHA-256 hash of an API key token (not a password — intentionally fast)."""
-    token_bytes = api_key_token.encode()
-    return hashlib.sha256(token_bytes).hexdigest()  # nosec: SHA-256 is appropriate for API key tokens
+    """Compute a SHA-256 digest of an API key token for storage comparison.
+
+    SHA-256 is intentionally used here — this is NOT password hashing.
+    API key tokens are long random values (256-bit entropy); a fast digest is
+    sufficient and bcrypt would be unnecessarily slow for this lookup path.
+    """
+    digest = hashlib.sha256(api_key_token.encode())
+    return digest.hexdigest()
 
 
 def generate_api_key() -> str:
