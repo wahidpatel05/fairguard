@@ -74,7 +74,7 @@ def compute_fairness_metrics(
         fprs = [v["fpr"] for v in group_stats.values()]
         accuracies = [v["accuracy"] for v in group_stats.values()]
 
-        di = (min(positive_rates) / max(positive_rates)) if max(positive_rates) > 0 else 1.0
+        di = (min(positive_rates) / max(positive_rates)) if positive_rates and max(positive_rates) > 0 else 1.0
         tpr_gap = float(max(tprs) - min(tprs)) if tprs else 0.0
         fpr_gap = float(max(fprs) - min(fprs)) if fprs else 0.0
         acc_gap = float(max(accuracies) - min(accuracies)) if accuracies else 0.0
