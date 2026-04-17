@@ -6,6 +6,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.audits import router as audits_router
 from app.api.v1.contracts import router as contracts_router
+from app.api.v1.notifications import router as notifications_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.receipts import router as receipts_router
 from app.api.v1.reports import router as reports_router
@@ -18,6 +19,7 @@ api_router.include_router(auth_router)
 api_router.include_router(api_keys_router)
 api_router.include_router(audits_router)
 api_router.include_router(contracts_router)
+api_router.include_router(notifications_router)
 api_router.include_router(projects_router)
 api_router.include_router(receipts_router)
 api_router.include_router(reports_router)
