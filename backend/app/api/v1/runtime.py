@@ -1,7 +1,10 @@
 """API endpoints for runtime monitoring, firewall proxy, and snapshot management."""
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
@@ -26,6 +29,50 @@ from app.services.runtime import get_current_status
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/runtime", tags=["runtime"])
+
+
+# ---------------------------------------------------------------------------
+# Proxy URL safety helpers
+# ---------------------------------------------------------------------------
+
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _validate_downstream_url(url: str) -> str | None:
+    """Return an error message if *url* is unsafe, else None.
+
+    Enforces:
+    - http or https scheme only
+    - Non-empty host
+    - Host does not resolve to a private/loopback address (basic SSRF guard)
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return "X-Downstream-URL must use http or https scheme"
+    hostname = parsed.hostname
+    if not hostname:
+        return "X-Downstream-URL must contain a valid host"
+    # Block hostnames that look obviously internal without a DNS lookup
+    _blocked_names = {"localhost", "metadata.google.internal"}
+    if hostname.lower() in _blocked_names:
+        return "X-Downstream-URL resolves to a private/internal address"
+    try:
+        resolved_ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+        if any(resolved_ip in net for net in _PRIVATE_NETWORKS):
+            return "X-Downstream-URL resolves to a private/internal address"
+    except (socket.gaierror, ValueError):
+        # If we can't resolve, let the downstream request fail naturally
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -128,20 +175,17 @@ async def proxy_request(
             content={"error": "missing_header", "detail": "X-Downstream-URL header is required"},
         )
 
-    # Validate scheme to prevent SSRF against internal services via non-HTTP protocols.
-    # Only http and https are permitted; this endpoint is intended to proxy external
-    # model endpoints authenticated by the API key on the caller side.
-    from urllib.parse import urlparse
-
-    parsed_url = urlparse(x_downstream_url)
-    if parsed_url.scheme not in ("http", "https"):
+    # Validate the downstream URL to prevent SSRF against internal services.
+    url_error = _validate_downstream_url(x_downstream_url)
+    if url_error:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "error": "invalid_downstream_url",
-                "detail": "X-Downstream-URL must use http or https scheme",
-            },
+            content={"error": "invalid_downstream_url", "detail": url_error},
         )
+
+    # Build a sanitised URL from parsed components to prevent header injection
+    _parsed = urlparse(x_downstream_url)
+    safe_url = _parsed.geturl()
 
     fail_mode = (x_fail_mode or "open").lower()
 
@@ -186,7 +230,7 @@ async def proxy_request(
         async with httpx.AsyncClient(timeout=30.0) as client:
             downstream_response = await client.request(
                 method=request.method,
-                url=x_downstream_url,
+                url=safe_url,
                 content=body_bytes,
                 headers=forward_headers,
             )
