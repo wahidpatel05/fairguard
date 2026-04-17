@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { UploadCloud, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -10,8 +10,10 @@ import AppLayout from '../components/Layout/AppLayout';
 import VerdictBadge from '../components/Common/VerdictBadge';
 import ContractStatusTable from '../components/Common/ContractStatusTable';
 import MetricsBarChart from '../components/Charts/MetricsBarChart';
-import { runAudit, type AuditResult } from '../api/audits';
+import { runAudit } from '../api/audits';
 import { getProjects } from '../api/projects';
+import type { AuditResultResponse } from '../types';
+import { extractGroupMetrics } from '../types';
 
 const schema = z.object({
   project_id: z.string().min(1, 'Select a project'),
@@ -27,7 +29,7 @@ const AuditPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const defaultProjectId = searchParams.get('project') ?? '';
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [result, setResult] = useState<AuditResult | null>(null);
+  const [result, setResult] = useState<AuditResultResponse | null>(null);
   const [running, setRunning] = useState(false);
 
   const { data: projects = [] } = useQuery({
@@ -54,7 +56,7 @@ const AuditPage: React.FC = () => {
     setResult(null);
     try {
       const formData = new FormData();
-      formData.append('csv_file', csvFile);
+      formData.append('file', csvFile);
       formData.append('project_id', data.project_id);
       formData.append('target_column', data.target_column);
       formData.append('prediction_column', data.prediction_column);
@@ -180,19 +182,6 @@ const AuditPage: React.FC = () => {
               )}
             </div>
 
-            {/* Endpoint ID */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Endpoint ID{' '}
-                <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                {...register('endpoint_id')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. model-v1"
-              />
-            </div>
-
             <button
               type="submit"
               disabled={running}
@@ -216,83 +205,137 @@ const AuditPage: React.FC = () => {
   );
 };
 
-export const AuditResultView: React.FC<{ result: AuditResult }> = ({ result }) => (
-  <div className="space-y-6">
-    {/* Overall Verdict */}
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center gap-4">
-        <div>
-          <p className="text-sm text-gray-500 mb-1">Overall Verdict</p>
-          <VerdictBadge verdict={result.overall_verdict} size="lg" />
+export const AuditResultView: React.FC<{ result: AuditResultResponse }> = ({ result }) => {
+  const groupMetrics = extractGroupMetrics(result.audit.metrics_json);
+
+  return (
+    <div className="space-y-6">
+      {/* Overall Verdict */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Overall Verdict</p>
+            <VerdictBadge verdict={result.audit.verdict ?? 'UNKNOWN'} size="lg" />
+          </div>
+          {result.receipt_id && (
+            <div className="ml-auto">
+              <Link
+                to={`/receipts/${result.receipt_id}`}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                View Fairness Receipt →
+              </Link>
+            </div>
+          )}
         </div>
-        {result.receipt_id && (
-          <div className="ml-auto">
-            <a
-              href={`/receipts/${result.receipt_id}`}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              View Fairness Receipt →
-            </a>
+
+        {/* Global metrics summary */}
+        {result.audit.metrics_json?.global && (
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Total Rows</p>
+              <p className="text-xl font-bold text-gray-900">
+                {result.audit.metrics_json.global.total_rows}
+              </p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Positive Outcome Rate</p>
+              <p className="text-xl font-bold text-gray-900">
+                {(result.audit.metrics_json.global.positive_outcome_rate * 100).toFixed(1)}%
+              </p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Overall Accuracy</p>
+              <p className="text-xl font-bold text-gray-900">
+                {(result.audit.metrics_json.global.overall_accuracy * 100).toFixed(1)}%
+              </p>
+            </div>
           </div>
         )}
       </div>
-    </div>
 
-    {/* Contract Results */}
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h3 className="text-base font-semibold text-gray-900 mb-4">Contract Results</h3>
-      <ContractStatusTable contracts={result.contract_results} />
-    </div>
-
-    {/* Group Metrics */}
-    {result.group_metrics && result.group_metrics.length > 0 && (
-      <>
+      {/* Contract Evaluations */}
+      {result.contract_evaluations.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">Per-Group Metrics</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {['Group', 'Approval Rate', 'TPR', 'FPR', 'Accuracy'].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {result.group_metrics.map((g, i) => (
-                  <tr key={`${g.group}-${i}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{g.group}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                      {g.approval_rate.toFixed(4)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                      {g.tpr.toFixed(4)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                      {g.fpr.toFixed(4)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                      {g.accuracy.toFixed(4)}
-                    </td>
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Contract Evaluations</h3>
+          <ContractStatusTable contracts={result.contract_evaluations} />
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {result.recommendations.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Recommendations</h3>
+          <ul className="space-y-3">
+            {result.recommendations.map((rec, i) => (
+              <li key={i} className="flex gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <span className="text-amber-500 mt-0.5 flex-shrink-0">⚠</span>
+                <div>
+                  {rec.title && <p className="text-sm font-semibold text-gray-900">{String(rec.title)}</p>}
+                  {rec.description && <p className="text-sm text-gray-600 mt-0.5">{String(rec.description)}</p>}
+                  {rec.metric && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Metric: {String(rec.metric)}
+                      {rec.attribute ? ` · Attribute: ${String(rec.attribute)}` : ''}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Group Metrics */}
+      {groupMetrics.length > 0 && (
+        <>
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Per-Group Metrics</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Group', 'Approval Rate', 'TPR', 'FPR', 'Accuracy'].map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {groupMetrics.map((g, i) => (
+                    <tr key={`${g.group}-${i}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{g.group}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 font-mono">
+                        {g.approval_rate.toFixed(4)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 font-mono">
+                        {g.tpr.toFixed(4)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 font-mono">
+                        {g.fpr.toFixed(4)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 font-mono">
+                        {g.accuracy.toFixed(4)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">Metrics by Group</h3>
-          <MetricsBarChart data={result.group_metrics} />
-        </div>
-      </>
-    )}
-  </div>
-);
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Metrics by Group</h3>
+            <MetricsBarChart data={groupMetrics} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 export default AuditPage;

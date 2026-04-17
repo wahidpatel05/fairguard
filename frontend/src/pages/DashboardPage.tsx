@@ -13,13 +13,18 @@ const DashboardPage: React.FC = () => {
     queryKey: ['projects'],
     queryFn: getProjects,
   });
-  const { data: audits = [], isLoading: loadingAudits } = useQuery({
-    queryKey: ['auditLogs'],
-    queryFn: () => getAuditLogs(),
+  const { data: recentAudits = [], isLoading: loadingAudits } = useQuery({
+    queryKey: ['allAuditSummaries'],
+    queryFn: async () => {
+      if (projects.length === 0) return [];
+      const results = await Promise.all(projects.map((p) => getAuditLogs(p.id)));
+      return results.flat();
+    },
+    enabled: projects.length > 0,
   });
 
   const getProjectAudits = (projectId: string) =>
-    audits.filter((a) => a.project_id === projectId);
+    recentAudits.filter((a) => a.project_id === projectId);
 
   const getLatestVerdict = (projectId: string) => {
     const projectAudits = getProjectAudits(projectId);
@@ -37,6 +42,8 @@ const DashboardPage: React.FC = () => {
     education: 'bg-pink-100 text-pink-700',
   };
 
+  const failingAudits = recentAudits.filter((a) => a.verdict === 'FAIL').length;
+
   return (
     <AppLayout title="Dashboard">
       <div className="space-y-6">
@@ -48,13 +55,11 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="text-sm text-gray-500">Total Audits</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{audits.length}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{recentAudits.length}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="text-sm text-gray-500">Failing Audits</p>
-            <p className="text-3xl font-bold text-red-600 mt-1">
-              {audits.filter((a) => a.verdict === 'FAIL').length}
-            </p>
+            <p className="text-3xl font-bold text-red-600 mt-1">{failingAudits}</p>
           </div>
         </div>
 
@@ -94,9 +99,6 @@ const DashboardPage: React.FC = () => {
               {projects.map((project) => {
                 const verdict = getLatestVerdict(project.id);
                 const projectAudits = getProjectAudits(project.id);
-                const failingContracts = projectAudits
-                  .flatMap((a) => a.result?.contract_results ?? [])
-                  .filter((c) => c.status === 'FAIL');
 
                 return (
                   <div
@@ -121,12 +123,6 @@ const DashboardPage: React.FC = () => {
                     <div className="text-sm text-gray-500 mb-4">
                       <span className="font-medium text-gray-700">{projectAudits.length}</span>{' '}
                       audit{projectAudits.length !== 1 ? 's' : ''}
-                      {failingContracts.length > 0 && (
-                        <span className="ml-2 text-red-600">
-                          · {failingContracts.length} failing contract
-                          {failingContracts.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
                     </div>
 
                     <div className="flex gap-2">
@@ -153,14 +149,14 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Recent Audits */}
-        {audits.length > 0 && (
+        {recentAudits.length > 0 && (
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Audits</h2>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <table className="min-w-full divide-y divide-gray-100">
                 <thead className="bg-gray-50">
                   <tr>
-                    {['Project', 'Verdict', 'Date', ''].map((h) => (
+                    {['Project', 'File', 'Verdict', 'Date', ''].map((h) => (
                       <th
                         key={h}
                         className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -171,15 +167,18 @@ const DashboardPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {audits.slice(0, 5).map((audit) => {
+                  {recentAudits.slice(0, 5).map((audit) => {
                     const project = projects.find((p) => p.id === audit.project_id);
                     return (
                       <tr key={audit.id} className="hover:bg-gray-50">
                         <td className="px-5 py-3 text-sm text-gray-900">
                           {project?.name ?? audit.project_id}
                         </td>
+                        <td className="px-5 py-3 text-sm text-gray-500 max-w-xs truncate">
+                          {audit.dataset_filename ?? '—'}
+                        </td>
                         <td className="px-5 py-3">
-                          <VerdictBadge verdict={audit.verdict} size="sm" />
+                          <VerdictBadge verdict={audit.verdict ?? 'UNKNOWN'} size="sm" />
                         </td>
                         <td className="px-5 py-3 text-sm text-gray-500">
                           {new Date(audit.created_at).toLocaleDateString()}

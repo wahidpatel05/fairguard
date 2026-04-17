@@ -3,38 +3,96 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/Layout/AppLayout';
 import TrafficLight from '../components/Common/TrafficLight';
-import RuntimeTimeSeriesChart from '../components/Charts/RuntimeTimeSeriesChart';
 import { getProjects } from '../api/projects';
-import { getRuntimeStatus, getRuntimeHistory } from '../api/runtime';
+import { getRuntimeStatus, getRuntimeSnapshots } from '../api/runtime';
+import type { RuntimeWindowStatus } from '../types';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 
-const TIME_WINDOWS = [
-  { label: '1 hour', value: '1h' },
-  { label: '6 hours', value: '6h' },
-  { label: '24 hours', value: '24h' },
-  { label: '7 days', value: '7d' },
-];
+const WINDOW_LABELS: Record<string, string> = {
+  '1h': '1 Hour',
+  '6h': '6 Hours',
+  '24h': '24 Hours',
+  '7d': '7 Days',
+};
+
+const statusColors: Record<string, string> = {
+  healthy: 'bg-green-50 border-green-200',
+  warning: 'bg-amber-50 border-amber-200',
+  critical: 'bg-red-50 border-red-200',
+  insufficient_data: 'bg-gray-50 border-gray-200',
+  no_data: 'bg-gray-50 border-gray-200',
+};
+
+const WindowCard: React.FC<{ windowType: string; data: RuntimeWindowStatus }> = ({
+  windowType,
+  data,
+}) => {
+  const label = WINDOW_LABELS[windowType] ?? windowType;
+  const metricEntries = Object.entries(data.metrics).filter(
+    ([, v]) => typeof v === 'number',
+  ) as [string, number][];
+
+  return (
+    <div className={`rounded-xl border p-5 ${statusColors[data.status] ?? 'bg-white border-gray-200'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">{label} window</h3>
+        <TrafficLight status={data.status} size="sm" showLabel />
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        {data.count} decision{data.count !== 1 ? 's' : ''}
+        {data.evaluated_at
+          ? ` · ${new Date(data.evaluated_at).toLocaleTimeString()}`
+          : ''}
+      </p>
+      {metricEntries.length > 0 ? (
+        <dl className="space-y-1.5">
+          {metricEntries.map(([key, val]) => (
+            <div key={key} className="flex justify-between text-xs">
+              <dt className="text-gray-500 capitalize">{key.replace(/_/g, ' ')}</dt>
+              <dd className="font-mono font-medium text-gray-900">
+                {typeof val === 'number' ? val.toFixed(4) : String(val)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="text-xs text-gray-400">No metrics computed yet.</p>
+      )}
+    </div>
+  );
+};
+
+const SNAPSHOT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 const RuntimePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProject, setSelectedProject] = useState(searchParams.get('project') ?? '');
-  const [endpointId, setEndpointId] = useState('');
-  const [timeWindow, setTimeWindow] = useState('1h');
+  const [aggregationKey, setAggregationKey] = useState('');
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: getProjects,
   });
 
-  const { data: status, isLoading: loadingStatus } = useQuery({
-    queryKey: ['runtimeStatus', selectedProject, endpointId],
-    queryFn: () => getRuntimeStatus(selectedProject, endpointId || undefined),
+  const { data: statusData, isLoading: loadingStatus } = useQuery({
+    queryKey: ['runtimeStatus', selectedProject, aggregationKey],
+    queryFn: () => getRuntimeStatus(selectedProject, aggregationKey || undefined),
     enabled: !!selectedProject,
     refetchInterval: 30000,
   });
 
-  const { data: history = [], isLoading: loadingHistory } = useQuery({
-    queryKey: ['runtimeHistory', selectedProject, endpointId, timeWindow],
-    queryFn: () => getRuntimeHistory(selectedProject, endpointId || undefined, timeWindow),
+  const { data: snapshots = [], isLoading: loadingSnapshots } = useQuery({
+    queryKey: ['runtimeSnapshots', selectedProject, aggregationKey],
+    queryFn: () => getRuntimeSnapshots(selectedProject, aggregationKey || undefined, 50),
     enabled: !!selectedProject,
     refetchInterval: 30000,
   });
@@ -44,11 +102,28 @@ const RuntimePage: React.FC = () => {
     setSearchParams(pid ? { project: pid } : {});
   };
 
-  const statusBgColors: Record<string, string> = {
-    healthy: 'bg-green-50 border-green-200',
-    warning: 'bg-amber-50 border-amber-200',
-    critical: 'bg-red-50 border-red-200',
-  };
+  // Build chart data from snapshots
+  const chartData = snapshots
+    .slice()
+    .reverse()
+    .map((s) => {
+      const ts = new Date(s.evaluated_at).toLocaleTimeString();
+      const metrics: Record<string, number | string> = { time: ts, window: s.window_type };
+      if (s.metrics_json) {
+        for (const [k, v] of Object.entries(s.metrics_json)) {
+          if (typeof v === 'number') metrics[k] = v;
+        }
+      }
+      return metrics;
+    });
+
+  const metricKeys = Array.from(
+    new Set(
+      chartData.flatMap((d) =>
+        Object.keys(d).filter((k) => k !== 'time' && k !== 'window'),
+      ),
+    ),
+  );
 
   return (
     <AppLayout title="Runtime Monitoring">
@@ -72,31 +147,15 @@ const RuntimePage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Endpoint ID</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Aggregation Key
+              </label>
               <input
-                value={endpointId}
-                onChange={(e) => setEndpointId(e.target.value)}
-                placeholder="All endpoints"
+                value={aggregationKey}
+                onChange={(e) => setAggregationKey(e.target.value)}
+                placeholder="Optional endpoint / model key"
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Time Window</label>
-              <div className="flex gap-1">
-                {TIME_WINDOWS.map((w) => (
-                  <button
-                    key={w.value}
-                    onClick={() => setTimeWindow(w.value)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                      timeWindow === w.value
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {w.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -109,70 +168,31 @@ const RuntimePage: React.FC = () => {
 
         {selectedProject && (
           <>
-            {/* Status Overview */}
+            {/* Overall Status */}
             {loadingStatus ? (
               <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-1/4 mb-4" />
                 <div className="h-8 bg-gray-100 rounded w-1/3" />
               </div>
-            ) : status ? (
+            ) : statusData ? (
               <div
                 className={`rounded-xl border p-6 ${
-                  statusBgColors[status.overall_status] ?? 'bg-white border-gray-200'
+                  statusColors[statusData.overall_status] ?? 'bg-white border-gray-200'
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm text-gray-500 mb-1">Overall Status</p>
-                    <TrafficLight status={status.overall_status} size="lg" />
+                    <TrafficLight status={statusData.overall_status} size="lg" />
                   </div>
-                  <p className="text-xs text-gray-400">
-                    Last updated: {new Date(status.last_updated).toLocaleString()}
-                  </p>
                 </div>
 
-                {status.contract_statuses && status.contract_statuses.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                      Contract Statuses
-                    </h3>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200">
-                      <table className="min-w-full divide-y divide-gray-100">
-                        <thead className="bg-white/70">
-                          <tr>
-                            {['Contract', 'Metric', 'Status', 'Current Value', 'Threshold'].map(
-                              (h) => (
-                                <th
-                                  key={h}
-                                  className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                >
-                                  {h}
-                                </th>
-                              )
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50 bg-white/50">
-                          {status.contract_statuses.map((cs, i) => (
-                            <tr key={`${cs.contract_id}-${i}`}>
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                {cs.contract_id}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-700">{cs.metric}</td>
-                              <td className="px-4 py-3">
-                                <TrafficLight status={cs.status} showLabel />
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                                {cs.current_value.toFixed(4)}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                                {cs.threshold.toFixed(4)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                {/* Window cards */}
+                {Object.keys(statusData.windows).length > 0 && (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {Object.entries(statusData.windows).map(([wt, wdata]) => (
+                      <WindowCard key={wt} windowType={wt} data={wdata} />
+                    ))}
                   </div>
                 )}
               </div>
@@ -182,15 +202,41 @@ const RuntimePage: React.FC = () => {
               </div>
             )}
 
-            {/* Time Series */}
+            {/* Snapshots Time Series */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">Metrics Over Time</h3>
-              {loadingHistory ? (
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Metrics History (Snapshots)
+              </h3>
+              {loadingSnapshots ? (
                 <div className="h-64 flex items-center justify-center">
                   <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                 </div>
+              ) : chartData.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  No snapshot history available yet.
+                </div>
               ) : (
-                <RuntimeTimeSeriesChart data={history} />
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(v) => (typeof v === 'number' ? v.toFixed(4) : String(v))}
+                    />
+                    <Legend />
+                    {metricKeys.map((key, i) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={SNAPSHOT_COLORS[i % SNAPSHOT_COLORS.length]}
+                        dot={false}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
               )}
             </div>
           </>

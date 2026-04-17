@@ -1,7 +1,8 @@
 import React from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, FileCheck2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import AppLayout from '../components/Layout/AppLayout';
 import { AuditResultView } from './AuditPage';
 import { getAuditDetail } from '../api/audits';
@@ -10,7 +11,7 @@ const AuditDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: audit, isLoading, isError } = useQuery({
+  const { data: auditResult, isLoading, isError } = useQuery({
     queryKey: ['auditDetail', id],
     queryFn: () => getAuditDetail(id!),
     enabled: !!id,
@@ -38,23 +39,34 @@ const AuditDetailPage: React.FC = () => {
           </div>
         )}
 
-        {audit && (
+        {auditResult && (
           <>
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <p className="text-xs text-gray-400 font-mono mb-1">Audit ID: {audit.id}</p>
-                  <p className="text-sm text-gray-500">
-                    Project: {audit.project_id}
-                    {audit.endpoint_id && ` · Endpoint: ${audit.endpoint_id}`}
+                  <p className="text-xs text-gray-400 font-mono mb-1">
+                    Audit ID: {auditResult.audit.id}
                   </p>
+                  <p className="text-sm text-gray-500">
+                    Project: {auditResult.audit.project_id}
+                    {auditResult.audit.target_column &&
+                      ` · Target: ${auditResult.audit.target_column}`}
+                    {auditResult.audit.prediction_column &&
+                      ` · Prediction: ${auditResult.audit.prediction_column}`}
+                  </p>
+                  {auditResult.audit.sensitive_columns &&
+                    auditResult.audit.sensitive_columns.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Sensitive: {auditResult.audit.sensitive_columns.join(', ')}
+                      </p>
+                    )}
                   <p className="text-xs text-gray-400 mt-1">
-                    {new Date(audit.created_at).toLocaleString()}
+                    {new Date(auditResult.audit.created_at).toLocaleString()}
                   </p>
                 </div>
-                {audit.result?.receipt_id && (
+                {auditResult.receipt_id && (
                   <Link
-                    to={`/receipts/${audit.result.receipt_id}`}
+                    to={`/receipts/${auditResult.receipt_id}`}
                     className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors"
                   >
                     <FileCheck2 className="w-4 h-4" /> View Fairness Receipt
@@ -63,13 +75,7 @@ const AuditDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {audit.result ? (
-              <AuditResultView result={audit.result} />
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-                Detailed results not available for this audit.
-              </div>
-            )}
+            <AuditResultView result={auditResult} />
           </>
         )}
       </div>
@@ -78,3 +84,4 @@ const AuditDetailPage: React.FC = () => {
 };
 
 export default AuditDetailPage;
+

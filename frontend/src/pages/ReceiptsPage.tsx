@@ -6,10 +6,11 @@ import toast from 'react-hot-toast';
 import AppLayout from '../components/Layout/AppLayout';
 import VerdictBadge from '../components/Common/VerdictBadge';
 import { getProjects } from '../api/projects';
-import { getReceipts, verifyReceipt, type Receipt } from '../api/receipts';
+import { getReceipts, verifyReceipt, type ReceiptFilters } from '../api/receipts';
+import type { FairnessReceipt } from '../types';
 
 const ReceiptDetailModal: React.FC<{
-  receipt: Receipt;
+  receipt: FairnessReceipt;
   onClose: () => void;
 }> = ({ receipt, onClose }) => {
   const verifyMutation = useMutation({
@@ -123,7 +124,7 @@ const ReceiptsPage: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState(searchParams.get('project') ?? '');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [viewReceipt, setViewReceipt] = useState<Receipt | null>(null);
+  const [viewReceipt, setViewReceipt] = useState<FairnessReceipt | null>(null);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -132,12 +133,13 @@ const ReceiptsPage: React.FC = () => {
 
   const { data: receipts = [], isLoading } = useQuery({
     queryKey: ['receipts', selectedProject, dateFrom, dateTo],
-    queryFn: () =>
-      getReceipts({
-        project_id: selectedProject || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      }),
+    queryFn: () => {
+      const filters: ReceiptFilters = {};
+      if (selectedProject) filters.project_id = selectedProject;
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
+      return getReceipts(filters);
+    },
   });
 
   const verifyMutation = useMutation({
