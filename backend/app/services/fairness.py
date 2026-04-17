@@ -159,6 +159,143 @@ class FairnessEngine:
             "by_attribute": by_attribute,
         }
 
+    # ------------------------------------------------------------------
+    # Contract evaluation helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def evaluate_contracts(metrics: dict, contracts_json: dict) -> list[dict]:
+        """Evaluate contract rules against computed fairness metrics.
+
+        Args:
+            metrics: Output of :meth:`compute_metrics` (keys ``global`` and
+                ``by_attribute``).
+            contracts_json: Contract JSON blob, e.g. ``{"rules": [...]}``.
+
+        Returns:
+            List of evaluation result dicts compatible with
+            :class:`~app.schemas.audit.ContractEvaluationResult`.
+        """
+        from services.fairness import evaluate_contracts as _eval  # legacy helper
+
+        rules: list[dict] = contracts_json.get("rules", [])
+
+        # Build flat metrics suitable for the legacy helper
+        flat_metrics: dict = {}
+        for attr, attr_data in metrics.get("by_attribute", {}).items():
+            flat_metrics[attr] = {
+                "disparate_impact": attr_data.get("disparate_impact", 0.0),
+                "tpr_gap": attr_data.get("tpr_difference", 0.0),
+                "tpr_difference": attr_data.get("tpr_difference", 0.0),
+                "fpr_gap": attr_data.get("fpr_difference", 0.0),
+                "accuracy_gap": attr_data.get("accuracy_difference", 0.0),
+            }
+
+        raw_results = _eval(flat_metrics, rules)
+
+        # Build a quick look-up from contract_id → rule so we can enrich output
+        rule_map: dict[str, dict] = {str(r.get("id", "")): r for r in rules}
+
+        enriched: list[dict] = []
+        for res in raw_results:
+            rule = rule_map.get(res["contract_id"], {})
+            enriched.append(
+                {
+                    "contract_id": res["contract_id"],
+                    "attribute": rule.get("sensitive_column"),
+                    "metric": res["metric"],
+                    "value": res["value"],
+                    "threshold": res["threshold"],
+                    "operator": res["operator"],
+                    "passed": res["status"] == "pass",
+                    "severity": rule.get("severity"),
+                    "explanation": res["explanation"],
+                }
+            )
+
+        return enriched
+
+    @staticmethod
+    def compute_verdict(contract_results: list[dict]) -> str:
+        """Determine overall audit verdict from contract evaluation results.
+
+        Returns:
+            ``"pass"``, ``"fail"``, or ``"pass_with_warnings"``.
+        """
+        if not contract_results:
+            return "pass"
+        statuses = {r.get("status", "pass" if r.get("passed") else "fail") for r in contract_results}
+        if "fail" in statuses:
+            return "fail"
+        if "warn" in statuses:
+            return "pass_with_warnings"
+        # If all passed is True and no status "fail"/"warn", derive from 'passed'
+        if any(not r.get("passed", True) for r in contract_results):
+            return "fail"
+        return "pass"
+
+    @staticmethod
+    def generate_mitigation_recommendations(
+        failing_results: list[dict],
+    ) -> list[dict]:
+        """Generate mitigation recommendations for failing contract results.
+
+        Args:
+            failing_results: List of contract evaluation dicts where
+                ``passed`` is ``False`` (or ``status`` is ``"fail"``).
+
+        Returns:
+            List of recommendation dicts with keys ``contract_id``,
+            ``metric``, ``attribute``, and ``recommendations``.
+        """
+        _RECS: dict[str, list[str]] = {
+            "disparate_impact": [
+                "Reweight or resample training data to improve representation of underrepresented groups.",
+                "Apply adversarial debiasing or fair representation learning techniques.",
+                "Review feature selection to eliminate proxies for protected attributes.",
+                "Consider pre-processing techniques such as Reweighing (AIF360).",
+            ],
+            "tpr_gap": [
+                "Apply threshold optimization per group to equalize true positive rates.",
+                "Use equalized odds post-processing (e.g., ThresholdOptimizer in fairlearn).",
+                "Investigate data quality and labelling disparities across groups.",
+            ],
+            "tpr_difference": [
+                "Apply threshold optimization per group to equalize true positive rates.",
+                "Use equalized odds post-processing (e.g., ThresholdOptimizer in fairlearn).",
+                "Investigate data quality and labelling disparities across groups.",
+            ],
+            "fpr_gap": [
+                "Apply calibrated equalized odds post-processing.",
+                "Review decision thresholds independently per group to balance false positive rates.",
+            ],
+            "accuracy_gap": [
+                "Ensure balanced training samples across all demographic groups.",
+                "Consider group-specific calibration or boosting strategies.",
+                "Collect additional labelled data for underrepresented groups.",
+            ],
+        }
+        _DEFAULT = [
+            "Consult a fairness expert to review model behaviour for this metric.",
+            "Consider auditing training data for systematic biases.",
+        ]
+
+        recommendations: list[dict] = []
+        for result in failing_results:
+            metric = result.get("metric", "")
+            recs = _RECS.get(metric, _DEFAULT)
+            recommendations.append(
+                {
+                    "contract_id": result.get("contract_id"),
+                    "metric": metric,
+                    "attribute": result.get("attribute"),
+                    "value": result.get("value"),
+                    "threshold": result.get("threshold"),
+                    "recommendations": recs,
+                }
+            )
+        return recommendations
+
     @staticmethod
     def _explain_group(
         sensitive_col: str,
