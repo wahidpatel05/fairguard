@@ -36,6 +36,23 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     return user
 
 
+from fastapi.security import OAuth2PasswordRequestForm
+
+@router.post("/token", response_model=Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    """Authenticate via OAuth2 form data and return a JWT access token."""
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
+    token = create_access_token({"sub": str(user.id)})
+    return Token(access_token=token)
+
 @router.post("/login", response_model=Token)
 async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Authenticate and return a JWT access token."""

@@ -11,7 +11,7 @@ from core.database import Base
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now()
 
 
 class User(Base):

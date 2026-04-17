@@ -54,14 +54,11 @@ const AuditPage: React.FC = () => {
     setResult(null);
     try {
       const formData = new FormData();
-      formData.append('file', csvFile);
+      formData.append('csv_file', csvFile);
       formData.append('project_id', data.project_id);
       formData.append('target_column', data.target_column);
       formData.append('prediction_column', data.prediction_column);
-      formData.append(
-        'sensitive_columns',
-        JSON.stringify(data.sensitive_columns.split(',').map((s) => s.trim()).filter(Boolean))
-      );
+      formData.append('sensitive_columns', data.sensitive_columns);
       if (data.endpoint_id) formData.append('endpoint_id', data.endpoint_id);
 
       const res = await runAudit(formData);

@@ -34,7 +34,7 @@ export interface AuditLog {
 }
 
 export const runAudit = async (formData: FormData): Promise<AuditResult> => {
-  const { data } = await apiClient.post<AuditResult>('/audit/run', formData, {
+  const { data } = await apiClient.post<AuditResult>('/audit/offline', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;
