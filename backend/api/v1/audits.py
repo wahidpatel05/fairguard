@@ -2,7 +2,7 @@
 import base64
 import io
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
@@ -106,7 +106,7 @@ async def run_offline_audit(
         "dataset_hash": dataset_hash,
         "contract_version": contract_version,
         "verdict": verdict,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     private_key_bytes = base64.b64decode(settings.SIGNING_PRIVATE_KEY)
     public_key_bytes = base64.b64decode(settings.SIGNING_PUBLIC_KEY)

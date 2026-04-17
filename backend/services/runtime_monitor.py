@@ -1,7 +1,7 @@
 """Rolling window runtime metrics monitor."""
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -29,7 +29,7 @@ class RuntimeMonitor:
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         elif ts is None:
-            ts = datetime.utcnow()
+            ts = datetime.now(timezone.utc)
 
         decision = RuntimeDecision(
             project_id=project_id,
@@ -53,7 +53,7 @@ class RuntimeMonitor:
         from models.db import RuntimeDecision
 
         hours = self.WINDOW_HOURS.get(window, 1)
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         result = await db.execute(
             select(RuntimeDecision).where(

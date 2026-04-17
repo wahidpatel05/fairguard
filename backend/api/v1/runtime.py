@@ -1,6 +1,6 @@
 """Runtime firewall endpoints for live decision ingestion and monitoring."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -87,7 +87,7 @@ async def get_runtime_status(
         window=window,
         metrics=metrics,
         status=runtime_status,
-        computed_at=datetime.utcnow(),
+        computed_at=datetime.now(timezone.utc),
     )
 
 

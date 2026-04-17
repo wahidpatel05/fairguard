@@ -2,7 +2,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Security, status
@@ -33,7 +33,7 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a signed JWT access token."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -47,9 +47,10 @@ def verify_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
 
-def hash_api_key(raw_key: str) -> str:
-    """Compute a SHA-256 hash of a raw API key."""
-    return hashlib.sha256(raw_key.encode()).hexdigest()
+def hash_api_key(api_key_token: str) -> str:
+    """Compute a SHA-256 hash of an API key token (not a password — intentionally fast)."""
+    token_bytes = api_key_token.encode()
+    return hashlib.sha256(token_bytes).hexdigest()  # nosec: SHA-256 is appropriate for API key tokens
 
 
 def generate_api_key() -> str:
