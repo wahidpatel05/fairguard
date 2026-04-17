@@ -52,7 +52,14 @@ async def startup() -> None:
     except Exception as exc:
         logger.error("Redis connection failed: %s", exc)
 
-    # Signing key placeholder (Agent 5 will implement)
+    # Initialize signing key for receipt service
+    try:
+        from app.services.receipt import receipt_service
+        receipt_service.initialize()
+        logger.info("Receipt signing service initialized")
+    except Exception as exc:
+        logger.error("Failed to initialize receipt signing service: %s", exc)
+
     logger.info("Signing key initialized")
 
 

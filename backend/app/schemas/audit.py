@@ -26,3 +26,39 @@ class AuditOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AuditSummary(BaseModel):
+    """Lightweight audit summary for list views."""
+
+    id: UUID
+    project_id: UUID
+    dataset_filename: str | None
+    dataset_hash: str | None
+    verdict: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContractEvaluationResult(BaseModel):
+    """Result of evaluating a single fairness contract rule."""
+
+    contract_id: str
+    attribute: str | None = None
+    metric: str
+    value: float | None = None
+    threshold: float
+    operator: str
+    passed: bool
+    severity: str | None = None
+    explanation: str
+
+
+class AuditResultResponse(BaseModel):
+    """Full audit result including contract evaluations and recommendations."""
+
+    audit: AuditOut
+    contract_evaluations: list[ContractEvaluationResult]
+    recommendations: list[dict[str, Any]]
+    receipt_id: UUID | None = None
