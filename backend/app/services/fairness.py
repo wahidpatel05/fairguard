@@ -70,7 +70,7 @@ class FairnessEngine:
             reference_group = str(value_counts.idxmax())
 
             # 5b–5e. Build MetricFrame
-            def _selection_rate(y: pd.Series, y_pred: pd.Series) -> float:  # noqa: ANN001
+            def _selection_rate(y_true: pd.Series, y_pred: pd.Series) -> float:  # noqa: ANN001
                 return float((y_pred == 1).mean())
 
             metrics_dict = {

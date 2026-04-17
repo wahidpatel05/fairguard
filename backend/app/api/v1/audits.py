@@ -18,6 +18,9 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.audit import AuditOut
 from app.services.fairness import FairnessEngine
+# These helpers live in the legacy services module at backend/services/fairness.py
+# (alongside app/ rather than inside it) – this is intentional: they are shared
+# by the CLI and the Celery worker as well as the API.
 from services.fairness import (
     compute_dataset_hash,
     evaluate_contracts,
