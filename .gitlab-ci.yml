@@ -1,0 +1,28 @@
+stages:
+  - test
+  - fairness
+
+fairness-gate:
+  stage: fairness
+  image: python:3.11-slim
+  variables:
+    FAIRGUARD_URL: ""       # Set in GitLab CI/CD → Variables
+    FAIRGUARD_KEY: ""       # Set in GitLab CI/CD → Variables
+    PROJECT_ID: ""          # Set in GitLab CI/CD → Variables
+  before_script:
+    - pip install --quiet fairguard-cli
+  script:
+    - fairguard init
+        --api-url "$FAIRGUARD_URL"
+        --api-key "$FAIRGUARD_KEY"
+        --no-interactive
+    - fairguard test
+        --data outputs/predictions.csv
+        --project-id "$PROJECT_ID"
+        --target actual
+        --prediction predicted
+        --sensitive gender,race
+  allow_failure: false
+  only:
+    - main
+    - merge_requests
