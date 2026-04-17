@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { User } from '../types';
 
 export interface LoginRequest {
   username: string;
@@ -11,16 +12,10 @@ export interface RegisterRequest {
   full_name: string;
 }
 
-export interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  role: string;
-}
-
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+  user: User;
 }
 
 export const login = async (email: string, password: string): Promise<TokenResponse> => {
@@ -42,3 +37,4 @@ export const getMe = async (): Promise<User> => {
   const { data } = await apiClient.get<User>('/auth/me');
   return data;
 };
+

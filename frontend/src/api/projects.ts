@@ -1,19 +1,7 @@
 import apiClient from './client';
+import type { Project, CreateProjectRequest } from '../types';
 
-export interface Project {
-  id: string;
-  name: string;
-  domain: string;
-  description?: string;
-  owner_id: string;
-  created_at: string;
-}
-
-export interface CreateProjectRequest {
-  name: string;
-  domain: string;
-  description?: string;
-}
+export type { Project, CreateProjectRequest };
 
 export const getProjects = async (): Promise<Project[]> => {
   const { data } = await apiClient.get<Project[]>('/projects/');
@@ -38,3 +26,4 @@ export const updateProject = async (id: string, payload: Partial<CreateProjectRe
 export const deleteProject = async (id: string): Promise<void> => {
   await apiClient.delete(`/projects/${id}`);
 };
+

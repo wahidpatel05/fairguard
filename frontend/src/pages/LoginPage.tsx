@@ -26,6 +26,9 @@ const LoginPage: React.FC = () => {
     try {
       const res = await login(data.email, data.password);
       localStorage.setItem('token', res.access_token);
+      if (res.user) {
+        localStorage.setItem('user', JSON.stringify(res.user));
+      }
       toast.success('Logged in successfully');
       navigate('/');
     } catch (err: unknown) {

@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import type { GroupMetric } from '../../api/audits';
+import type { GroupMetric } from '../../types';
 
 interface MetricsBarChartProps {
   data: GroupMetric[];
