@@ -19,39 +19,16 @@ depends_on: str | tuple[str, ...] | None = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # ENUM TYPES
+    # ENUM TYPES (EXPLICIT SQL)
     # ------------------------------------------------------------------
-    user_role = postgresql.ENUM(
-        "admin", "project_owner", "viewer", name="user_role", create_type=False
-    )
-    project_domain = postgresql.ENUM(
-        "hiring", "lending", "healthcare", "other",
-        name="project_domain", create_type=False,
-    )
-    audit_verdict = postgresql.ENUM(
-        "pass", "fail", "pass_with_warnings",
-        name="audit_verdict", create_type=False,
-    )
-    audit_trigger = postgresql.ENUM(
-        "api", "cli", name="audit_trigger", create_type=False
-    )
-    window_type = postgresql.ENUM(
-        "last_100", "last_1000", "last_1hr", "last_24hr",
-        name="window_type", create_type=False,
-    )
-    snapshot_status = postgresql.ENUM(
-        "healthy", "warning", "critical",
-        name="snapshot_status", create_type=False,
-    )
-    notification_channel = postgresql.ENUM(
-        "email", "webhook", name="notification_channel", create_type=False
-    )
+    op.execute("CREATE TYPE user_role AS ENUM ('admin', 'project_owner', 'viewer')")
+    op.execute("CREATE TYPE project_domain AS ENUM ('hiring', 'lending', 'healthcare', 'other')")
+    op.execute("CREATE TYPE audit_verdict AS ENUM ('pass', 'fail', 'pass_with_warnings')")
+    op.execute("CREATE TYPE audit_trigger AS ENUM ('api', 'cli')")
+    op.execute("CREATE TYPE window_type AS ENUM ('last_100', 'last_1000', 'last_1hr', 'last_24hr')")
+    op.execute("CREATE TYPE snapshot_status AS ENUM ('healthy', 'warning', 'critical')")
+    op.execute("CREATE TYPE notification_channel AS ENUM ('email', 'webhook')")
 
-    for enum in (
-        user_role, project_domain, audit_verdict, audit_trigger,
-        window_type, snapshot_status, notification_channel,
-    ):
-        enum.create(op.get_bind(), checkfirst=True)
 
     # ------------------------------------------------------------------
     # TABLE: users
@@ -69,7 +46,7 @@ def upgrade() -> None:
         sa.Column("full_name", sa.String(255), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("admin", "project_owner", "viewer", name="user_role"),
+            sa.Enum("admin", "project_owner", "viewer", name="user_role", create_type=False),
             server_default="project_owner",
             nullable=False,
         ),
@@ -101,7 +78,7 @@ def upgrade() -> None:
         sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "domain",
-            sa.Enum("hiring", "lending", "healthcare", "other", name="project_domain"),
+            sa.Enum("hiring", "lending", "healthcare", "other", name="project_domain", create_type=False),
             nullable=False,
         ),
         sa.Column(
@@ -176,12 +153,12 @@ def upgrade() -> None:
         ),
         sa.Column(
             "verdict",
-            sa.Enum("pass", "fail", "pass_with_warnings", name="audit_verdict"),
+            sa.Enum("pass", "fail", "pass_with_warnings", name="audit_verdict", create_type=False),
             nullable=True,
         ),
         sa.Column(
             "triggered_by",
-            sa.Enum("api", "cli", name="audit_trigger"),
+            sa.Enum("api", "cli", name="audit_trigger", create_type=False),
             nullable=True,
         ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -300,7 +277,7 @@ def upgrade() -> None:
             "window_type",
             sa.Enum(
                 "last_100", "last_1000", "last_1hr", "last_24hr",
-                name="window_type",
+                name="window_type", create_type=False
             ),
             nullable=False,
         ),
@@ -311,7 +288,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            sa.Enum("healthy", "warning", "critical", name="snapshot_status"),
+            sa.Enum("healthy", "warning", "critical", name="snapshot_status", create_type=False),
             nullable=False,
         ),
         sa.Column(
@@ -345,7 +322,7 @@ def upgrade() -> None:
         sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "channel",
-            sa.Enum("email", "webhook", name="notification_channel"),
+            sa.Enum("email", "webhook", name="notification_channel", create_type=False),
             nullable=False,
         ),
         sa.Column("target", sa.Text(), nullable=False),

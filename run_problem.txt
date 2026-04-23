@@ -1,0 +1,39 @@
+# Project Run Problems
+
+The FairGuard project currently encounters a few issues when trying to start and initialize the database following the existing `RUN_GUIDE.txt`. 
+
+Here are the root causes of the problems preventing the project from running properly out-of-the-box:
+
+### 1. Missing Environment Variables
+The `RUN_GUIDE.txt` provides an initial `.env` template, but it is incomplete. The backend application uses `pydantic_settings` for configuration and explicitly requires two more variables that are not provided in the guide:
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND`
+
+**Error triggered:**
+```
+pydantic_core._pydantic_core.ValidationError: 3 validation errors for Settings
+SECRET_KEY
+  Field required...
+CELERY_BROKER_URL
+  Field required...
+CELERY_RESULT_BACKEND
+  Field required...
+```
+
+### 2. Alembic Migration & PostgreSQL Enum Creation
+Even after adding the missing environment variables, the database initialization command (`docker-compose exec backend alembic upgrade head`) fails when creating the tables. 
+
+**Error triggered:**
+```
+sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.DuplicateObjectError'>: type "user_role" already exists
+[SQL: CREATE TYPE user_role AS ENUM ('admin', 'project_owner', 'viewer')]
+```
+
+**Cause:**
+In the initial Alembic schema (`0001_initial_schema.py`), there is a conflict in how `sqlalchemy`, Alembic, and the `asyncpg` driver handle PostgreSQL ENUM types. 
+SQLAlchemy dynamically creates the type when encountering `sa.Enum(...)` inside `op.create_table()`. The migration script attempts to manually or automatically create the ENUMs, which triggers `CREATE TYPE ... AS ENUM` multiple times, leading to a `DuplicateObjectError` and aborting the migration. 
+
+### Conclusion
+To get the project running, we need to:
+1. Update `RUN_GUIDE.txt` or `.env.example` to supply the missing Celery environment variables.
+2. Refactor the `0001_initial_schema.py` migration script to properly handle PostgreSQL ENUM lifecycle with `asyncpg` (for example, utilizing SQLAlchemy's native `CreateEnumType` checks or exclusively using `sa.String()` on the schema level and managing the enums manually).
