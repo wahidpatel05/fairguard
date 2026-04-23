@@ -19,15 +19,16 @@ depends_on: str | tuple[str, ...] | None = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # ENUM TYPES (EXPLICIT SQL)
+    # ENUM TYPES (checkfirst=True makes creation idempotent)
     # ------------------------------------------------------------------
-    op.execute("CREATE TYPE user_role AS ENUM ('admin', 'project_owner', 'viewer')")
-    op.execute("CREATE TYPE project_domain AS ENUM ('hiring', 'lending', 'healthcare', 'other')")
-    op.execute("CREATE TYPE audit_verdict AS ENUM ('pass', 'fail', 'pass_with_warnings')")
-    op.execute("CREATE TYPE audit_trigger AS ENUM ('api', 'cli')")
-    op.execute("CREATE TYPE window_type AS ENUM ('last_100', 'last_1000', 'last_1hr', 'last_24hr')")
-    op.execute("CREATE TYPE snapshot_status AS ENUM ('healthy', 'warning', 'critical')")
-    op.execute("CREATE TYPE notification_channel AS ENUM ('email', 'webhook')")
+    bind = op.get_bind()
+    postgresql.ENUM("admin", "project_owner", "viewer", name="user_role").create(bind, checkfirst=True)
+    postgresql.ENUM("hiring", "lending", "healthcare", "other", name="project_domain").create(bind, checkfirst=True)
+    postgresql.ENUM("pass", "fail", "pass_with_warnings", name="audit_verdict").create(bind, checkfirst=True)
+    postgresql.ENUM("api", "cli", name="audit_trigger").create(bind, checkfirst=True)
+    postgresql.ENUM("last_100", "last_1000", "last_1hr", "last_24hr", name="window_type").create(bind, checkfirst=True)
+    postgresql.ENUM("healthy", "warning", "critical", name="snapshot_status").create(bind, checkfirst=True)
+    postgresql.ENUM("email", "webhook", name="notification_channel").create(bind, checkfirst=True)
 
 
     # ------------------------------------------------------------------
