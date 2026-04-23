@@ -16,11 +16,12 @@ class FairGuardAPIError(Exception):
 class APIClient:
     """Thin httpx wrapper that attaches Bearer auth and raises on errors."""
 
-    def __init__(self, api_url: str, api_key: Optional[str] = None, timeout: float = 60.0) -> None:
+    def __init__(self, api_url: str, api_key: Optional[str] = None, timeout: float = 120.0) -> None:
         self.base_url = api_url.rstrip("/")
         headers = {"Accept": "application/json"}
         if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+            # Prefer X-API-Key header; the backend also accepts Bearer tokens.
+            headers["X-API-Key"] = api_key
         self._client = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
@@ -35,6 +36,12 @@ class APIClient:
         response = self._client.get(path, **kwargs)
         self._raise_for_status(response)
         return response.json()
+
+    def get_bytes(self, path: str, **kwargs: Any) -> bytes:
+        """Download a binary resource and return the raw bytes."""
+        response = self._client.get(path, **kwargs)
+        self._raise_for_status(response)
+        return response.content
 
     def post(self, path: str, **kwargs: Any) -> Any:
         response = self._client.post(path, **kwargs)

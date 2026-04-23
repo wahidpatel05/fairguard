@@ -1,0 +1,70 @@
+name: FairGuard Fairness Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fairness-gate:
+    name: Fairness Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install FairGuard CLI
+        run: pip install fairguard-cli
+
+      - name: Initialize FairGuard
+        run: |
+          fairguard init \
+            --api-url "${{ secrets.FAIRGUARD_API_URL }}" \
+            --api-key "${{ secrets.FAIRGUARD_API_KEY }}" \
+            --no-interactive
+
+      - name: Run Fairness Audit
+        id: fairness-audit
+        run: |
+          fairguard test \
+            --data outputs/predictions.csv \
+            --project-id "${{ secrets.FAIRGUARD_PROJECT_ID }}" \
+            --target actual \
+            --prediction predicted \
+            --sensitive gender,race
+        # Exit codes: 0=pass, 1=pass_with_warnings, 2=fail
+        # The step passes on 0 and 1, fails on 2
+
+      - name: Download PDF Report
+        if: always()
+        run: |
+          # Fetch the most recent audit ID from the API, then download the report.
+          AUDIT_ID=$(curl -s \
+            -H "X-API-Key: ${{ secrets.FAIRGUARD_API_KEY }}" \
+            "${{ secrets.FAIRGUARD_API_URL }}/audit/offline?project_id=${{ secrets.FAIRGUARD_PROJECT_ID }}" \
+            | python3 -c "import sys,json; data=json.load(sys.stdin); print(data[0]['id']) if data else print('')")
+          if [ -n "$AUDIT_ID" ]; then
+            fairguard report \
+              --audit-id "$AUDIT_ID" \
+              --format pdf \
+              --output "fairguard-report.pdf"
+          fi
+
+      - name: Upload Audit Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fairguard-report
+          path: fairguard-report.pdf
+          retention-days: 90
+          if-no-files-found: ignore
