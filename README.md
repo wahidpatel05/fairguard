@@ -1,49 +1,27 @@
 # FairGuard — AI Fairness Firewall & Audit Platform
 
-FairGuard is a middleware and governance layer that inspects datasets and AI/ML models for unfair discrimination, enforces fairness contracts during CI/CD pipelines, monitors live decision traffic for bias in production, and issues verifiable, cryptographically signed fairness receipts.
+FairGuard is a comprehensive middleware and governance layer designed to inspect datasets and AI/ML models for unfair discrimination. It enforces fairness contracts during CI/CD pipelines, monitors live decision traffic for bias in production, and issues cryptographically signed fairness receipts.
 
 ## Features
 
-- **Project & Fairness Contract Management** — CRUD for projects with configurable fairness contracts (disparate impact, TPR/FPR gaps, accuracy gaps) with versioning and validation
-- **Offline Dataset & Model Audit** — Upload CSV datasets, compute per-group fairness metrics with Fairlearn/numpy, evaluate contracts with PASS/FAIL/WARN verdicts
-- **Runtime Fairness Firewall** — Ingest live decision data, maintain rolling windows, monitor metrics continuously with alert thresholds
-- **Fairness Receipts & Attestations** — Auto-generate Ed25519-signed fairness receipts after each audit, verifiable via API
-- **React Dashboard** — Visual reporting with traffic-light indicators, bar charts, time-series charts, and plain-language metric explanations
-- **CLI & SDK** — `fairguard-cli` pip package for CI/CD integration, Python SDK for programmatic access
-- **Authentication & Authorization** — JWT auth, role-based access (admin/project_owner/viewer), API keys
+- **Project & Fairness Contract Management**: Full CRUD capabilities for configuring projects with rigorous fairness contracts (evaluating disparate impact, TPR/FPR gaps, and accuracy gaps) including versioning and metric validation.
+- **Offline Dataset & Model Audit**: Upload CSV datasets, analyze per-group fairness metrics leveraging Fairlearn and Numpy, and evaluate against your contracts giving PASS, FAIL, or WARN verdicts.
+- **Runtime Fairness Firewall**: Ingest live AI decision data using sliding windows, enabling continuous monitoring of fairness metrics and providing automated alert thresholds when bounds are breached.
+- **Fairness Receipts & Attestations**: Automatically generate Ed25519 verifiable cryptographically-signed records ("receipts") logging the fairness status of your ML audits.
+- **Interactive React Dashboard**: A clear visual reporting tool with traffic-light status indicators, detailed bar charts, real-time metrics time-series, and plain-language metric explanations so non-technical stakeholders can understand the bias.
+- **CI/CD CLI & Extensible SDK**: The `fairguard-cli` pip package allowing easy automated integration into your build/deployment pipelines, and a Python SDK for programmatic runtime access.
+- **Enterprise-ready Authentication & Authorization**: Secure JWT-based auth, scoped API keys, and role-based access control policies (admin, project_owner, viewer).
 
 ---
 
-## Architecture
+## Tech Stack Overview
 
-```
-fairguard/
-├── backend/          # FastAPI app (Python 3.11)
-│   ├── api/v1/       # Route handlers (auth, projects, contracts, audits, runtime, receipts)
-│   ├── services/     # Business logic (fairness metrics, Ed25519 signing, alerts, runtime monitor)
-│   ├── models/       # SQLAlchemy ORM models
-│   └── core/         # Config, auth (JWT), database, Pydantic schemas
-├── frontend/         # React SPA (TypeScript + Tailwind + Recharts)
-│   └── src/
-│       ├── api/      # Axios API client
-│       ├── pages/    # Dashboard, Projects, Audits, Runtime, Receipts
-│       └── components/ # Charts, MetricCards, TrafficLight, VerdictBadge
-├── cli/              # fairguard-cli pip package (Typer)
-├── sdk/              # fairguard-sdk pip package
-├── docker/           # Dockerfiles + nginx config
-│   ├── backend/Dockerfile
-│   ├── frontend/Dockerfile
-│   └── nginx/nginx.conf
-└── docs/             # API reference, CI examples, usage guide
-```
-
-**Services (docker-compose):**
-- `postgres` — PostgreSQL 15 (persistent storage)
-- `redis` — Redis 7 (task broker + caching)
-- `backend` — FastAPI + Uvicorn (API server, runs migrations on start)
-- `celery-worker` — Celery worker (async fairness computations)
-- `frontend` — React app built by Nginx
-- `nginx` — Reverse proxy (port 80 → backend API + frontend SPA)
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy 2.0, Alembic, asyncpg, Celery
+- **AI/Fairness**: Fairlearn, AIF360, Numpy, Pandas, Scikit-learn
+- **Database Architecture**: PostgreSQL 15, Redis 7 (task broker + caching)
+- **Frontend SPA**: React 18, TypeScript, Vite, Tailwind CSS, Recharts
+- **Security & Encryption**: JWT (HS256), bcrypt, Ed25519 (for signing receipts)
+- **Container**: Docker, Docker Compose
 
 ---
 
@@ -65,6 +43,12 @@ cp .env.example .env
 # At minimum, change SECRET_KEY:
 #   python -c "import secrets; print(secrets.token_hex(32))"
 nano .env
+```
+
+Also create `frontend/.env`:
+```bash
+# fairguard/frontend/.env
+VITE_API_URL="http://localhost:8000/api/v1"
 ```
 
 ### 2. Start all services
@@ -98,20 +82,18 @@ FastAPI auto-docs are available at:
 
 ## CLI Usage
 
-### Install
+Provide the tool with your generated API key (created from inside the Web App Dashboard):
 
 ```bash
 pip install fairguard-cli
+fairguard init
+fairguard test --data predictions.csv --target actual_label --prediction model_score --sensitive gender,race
+
+# Check runtime status
+fairguard status --project-id <your-ui-project-id>
 ```
 
-### Initialize
-
-```bash
-fairguard init --api-url http://localhost:8000/api/v1
-# Follow prompts for API key
-```
-
-Or non-interactively (for CI):
+### Initialize (non-interactive for CI)
 
 ```bash
 fairguard init \
@@ -250,6 +232,39 @@ fairness-gate:
 
 ---
 
+## Project Architecture
+
+```
+fairguard/
+├── backend/          # FastAPI app (Python 3.11)
+│   ├── api/v1/       # Route handlers (auth, projects, contracts, audits, runtime, receipts)
+│   ├── services/     # Business logic (fairness metrics, Ed25519 signing, alerts, runtime monitor)
+│   ├── models/       # SQLAlchemy ORM models
+│   └── core/         # Config, auth (JWT), database, Pydantic schemas
+├── frontend/         # React SPA (TypeScript + Tailwind + Recharts)
+│   └── src/
+│       ├── api/      # Axios API client
+│       ├── pages/    # Dashboard, Projects, Audits, Runtime, Receipts
+│       └── components/ # Charts, MetricCards, TrafficLight, VerdictBadge
+├── cli/              # fairguard-cli pip package (Typer)
+├── sdk/              # fairguard-sdk pip package
+├── docker/           # Dockerfiles + nginx config
+│   ├── backend/Dockerfile
+│   ├── frontend/Dockerfile
+│   └── nginx/nginx.conf
+└── docs/             # API reference, CI examples, usage guide
+```
+
+**Services (docker-compose):**
+- `postgres` — PostgreSQL 15 (persistent storage)
+- `redis` — Redis 7 (task broker + caching)
+- `backend` — FastAPI + Uvicorn (API server, runs migrations on start)
+- `celery-worker` — Celery worker (async fairness computations)
+- `frontend` — React app built by Nginx
+- `nginx` — Reverse proxy (port 80 → backend API + frontend SPA)
+
+---
+
 ## Environment Variables Reference
 
 | Variable | Required | Description |
@@ -270,41 +285,6 @@ fairness-gate:
 | `CORS_ORIGINS` | | JSON array of allowed CORS origins |
 | `FIRST_ADMIN_EMAIL` | | Seed admin email (default: `admin@fairguard.local`) |
 | `FIRST_ADMIN_PASSWORD` | | Seed admin password (default: `changeme123`) |
-
----
-
-## Startup Sequence (Manual)
-
-```bash
-# 1. Configure environment
-cp .env.example .env
-# Edit .env — set SECRET_KEY at minimum
-
-# 2. Start all services
-docker compose up -d --build
-
-# 3. The backend automatically runs migrations on startup.
-#    To run manually:
-docker compose exec backend alembic upgrade head
-
-# 4. Open the dashboard
-# http://localhost — login with admin@fairguard.local / changeme123
-
-# 5. Install the CLI
-pip install fairguard-cli
-fairguard init
-```
-
----
-
-## Tech Stack
-
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy 2.0, Alembic, asyncpg, Celery
-- **Fairness**: Fairlearn, AIF360, numpy/pandas
-- **Database**: PostgreSQL 15, Redis 7
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Recharts
-- **Auth**: JWT (HS256), bcrypt, Ed25519 (receipt signing)
-- **Container**: Docker, Docker Compose
 
 ## License
 
