@@ -13,8 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # Ensure the backend directory is on the path so app.* imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.core.config import settings  # noqa: E402
-from app.core.database import Base  # noqa: E402
+from app.core.base import Base  # noqa: E402
 
 # Import every model so that Alembic autogenerate can detect all tables
 import app.models.user  # noqa: F401, E402
@@ -27,8 +26,16 @@ import app.models.notification  # noqa: F401, E402
 import app.models.api_key  # noqa: F401, E402
 
 config = context.config
-# Override sqlalchemy.url from settings so .env is the single source of truth
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Override sqlalchemy.url from DATABASE_URL env var so only that one variable
+# is required when running Alembic (SECRET_KEY, REDIS_URL, etc. are not needed
+# for migrations and may not be set in migration-only environments).
+_db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+if not _db_url:
+    raise RuntimeError(
+        "DATABASE_URL must be set (via environment variable or alembic.ini "
+        "sqlalchemy.url) before running Alembic migrations."
+    )
+config.set_main_option("sqlalchemy.url", _db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -65,7 +72,7 @@ def do_run_migrations(connection) -> None:  # type: ignore[type-arg]
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations through a sync connection."""
     connectable = create_async_engine(
-        settings.DATABASE_URL,
+        config.get_main_option("sqlalchemy.url"),
         poolclass=pool.NullPool,
     )
     async with connectable.connect() as connection:
